@@ -1,6 +1,6 @@
 <div align="center">
 
-# DetectAnything2
+# DetectAnything
 
 **基于 Qt 6 + TensorRT 的桌面端多任务 AI 视觉推理部署演示**
 
