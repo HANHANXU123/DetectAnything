@@ -75,15 +75,15 @@
 
 ## 界面预览
 
-> 建议在 `docs/` 目录下放置截图后取消下方注释。
+深色无边框主界面：**左侧**为推理结果画布 + 实时日志面板，**右侧**自上而下为「任务类型 / 数据源 / 运行控制」三区，**底部状态栏**实时显示推理耗时(ms)、真实帧率(FPS) 与系统时钟。以下为四类已实现任务的实测运行截图：
 
-<!--
-| 目标检测 | 实例分割 | OCR |
-|:---:|:---:|:---:|
-| ![detection](docs/detection.png) | ![instance-seg](docs/instance_seg.png) | ![ocr](docs/ocr.png) |
--->
+| 目标检测 Detection | 实例分割 Instance Segmentation |
+|:---:|:---:|
+| ![目标检测](docs/detect.png) | ![实例分割](docs/instance-seg.png) |
 
-*（此处待补充运行截图）*
+| 语义分割 Semantic Segmentation | 文字识别 OCR |
+|:---:|:---:|
+| ![语义分割](docs/seg.png) | ![文字识别](docs/ocr.png) |
 
 ## 技术栈
 
@@ -174,6 +174,8 @@ DetectAnything2/
 │   ├── ocr/                  #   det.* / rec.* / ppocrv6_dict.txt
 │   ├── segment/              #   model_sim.onnx / model_sim.engine（语义分割）
 │   └── anomalyDetect/        #   （异常检测占位，空）
+│
+├── docs/                     # README 界面截图（detect / instance-seg / seg / ocr）
 │
 └── images/                   # 各任务的测试图片目录
     ├── 目标检测/
