@@ -425,7 +425,15 @@ void MainWindow::onSelectImages()
     QString defaultDir = m_imageDir;
     if (defaultDir.isEmpty()) {
         const QString base = "E:/work/AIversion/DetectAnything2/images/";
-        QString sub = (m_taskType == TaskType::OCR) ? QStringLiteral("OCR") : QStringLiteral("目标检测");
+        // TaskType → images 子目录，便于各任务默认打开各自的测试图片
+        QString sub;
+        switch (m_taskType) {
+        case TaskType::Detection:   sub = QStringLiteral("目标检测"); break;
+        case TaskType::SemanticSeg: sub = QStringLiteral("语义分割"); break;
+        case TaskType::InstanceSeg: sub = QStringLiteral("实例分割"); break;
+        case TaskType::OCR:         sub = QStringLiteral("字符检测"); break;
+        case TaskType::Anomaly:     sub = QStringLiteral("无监督异常检测"); break;
+        }
         defaultDir = base + sub;
         if (!QFileInfo(defaultDir).exists())
             defaultDir = base + QStringLiteral("目标检测");   // 任务专属目录不存在则回退

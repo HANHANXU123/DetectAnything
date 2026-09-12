@@ -39,6 +39,14 @@ public:
     const float *outputData(int i) const;         // 第 i 个输出数据指针（越界返回 nullptr）
     std::vector<int> outputShape(int i) const;    // 第 i 个输出形状，如 {1,300,38}
     size_t outputSize(int i) const;               // 第 i 个输出元素个数（越界返回 0）
+
+    // 原始输出访问：按 outputDataType(i) 解释 outputRaw(i) 指向的字节。
+    // outputData(i) 仅当输出为 float 时有效；整型输出（如语义分割图内 argmax
+    // 后的 INT32 类别索引图）必须用 outputRaw(i) + outputDataType(i) 正确解释，
+    // 否则把 int32 位模式当 float 读会得到完全错误的数值。
+    const void *outputRaw(int i) const;             // 第 i 个输出原始字节指针（越界返回 nullptr）
+    nvinfer1::DataType outputDataType(int i) const; // 第 i 个输出数据类型（越界返回 kFLOAT）
+
     std::vector<int> outputShape() const;         // = outputShape(0)，向后兼容单输出任务
     size_t outputSize() const;                    // = outputSize(0)，向后兼容单输出任务
 
@@ -66,6 +74,8 @@ private:
     // 且一次分配、多帧复用，避免每帧 std::vector 堆分配开销。
     std::vector<float *> m_outputHosts;
     std::vector<size_t> m_outputHostSizes;   // 各输出元素个数（非字节数）
+    std::vector<nvinfer1::DataType> m_outputTypes;  // 各输出真实数据类型（float/int32/...）
+    std::vector<size_t> m_outputElemBytes;          // 各输出单元素字节数（float/int32 均为 4）
 
     double m_lastH2DMs = 0.0;
     double m_lastInferMs = 0.0;

@@ -4,8 +4,8 @@ CONFIG += c++17
 
 # 项目根目录加入头文件搜索路径（扁平结构：所有源/头文件同目录）
 INCLUDEPATH += $$PWD
-# 任务源码子目录：YOLO 目标检测；YOLO-seg 实例分割；OCR（det/rec/utils/DB 后处理 + 第三方 clipper）
-INCLUDEPATH += $$PWD/yolo $$PWD/yolo-seg $$PWD/ocr $$PWD/ocr/clipper
+# 任务源码子目录：YOLO 目标检测；YOLO-seg 实例分割；segment 语义分割；OCR（det/rec/utils/DB 后处理 + 第三方 clipper）
+INCLUDEPATH += $$PWD/yolo $$PWD/yolo-seg $$PWD/segment $$PWD/ocr $$PWD/ocr/clipper
 
 # ============== OpenCV 配置 (MSVC) ==============
 OPENCV_SDK = E:/opencv/build
@@ -34,6 +34,7 @@ SOURCES += \
     logger.cpp \
     yolo/yolo.cpp \
     yolo-seg/yoloseg.cpp \
+    segment/segment.cpp \
     inferenceworker.cpp \
     trtengine.cpp \
     taskfactory.cpp \
@@ -49,6 +50,7 @@ HEADERS += \
     logger.h \
     yolo/yolo.h \
     yolo-seg/yoloseg.h \
+    segment/segment.h \
     inferenceworker.h \
     itask.h \
     trtengine.h \

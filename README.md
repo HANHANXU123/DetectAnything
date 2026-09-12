@@ -5,7 +5,7 @@
 **基于 Qt 6 + TensorRT 的桌面端多任务 AI 视觉推理部署演示**
 
 一个把「通用 TensorRT 推理引擎」与「具体任务的预处理 / 后处理 / 绘制」彻底解耦的
-多线程桌面推理框架，已落地 **目标检测**、**实例分割**、**OCR** 三类任务。
+多线程桌面推理框架，已落地 **目标检测**、**实例分割**、**语义分割**、**OCR** 四类任务。
 
 ![Qt](https://img.shields.io/badge/Qt-6.9.3-41CD52?logo=qt&logoColor=white)
 ![OpenCV](https://img.shields.io/badge/OpenCV-4.8.0-5C3EE8?logo=opencv&logoColor=white)
@@ -60,7 +60,7 @@
 | 目标检测 Detection | YOLO26m | ✅ 已实现 | 检测框 + `类别 置信度` 标签（COCO 80 类） |
 | 实例分割 Instance Segmentation | YOLO26m-seg | ✅ 已实现 | 半透明彩色掩膜 + 检测框 + 标签 |
 | 文字识别 OCR | PPOCR (det + rec) | ✅ 已实现 | 文本框 + 识别文字（微软雅黑中文渲染） |
-| 语义分割 Semantic Segmentation | — | 🚧 占位 | 工厂返回 `nullptr`，UI 记「未实现」 |
+| 语义分割 Semantic Segmentation | PaddleSeg (model_sim) | ✅ 已实现 | 半透明彩色类别掩膜叠加原图 |
 | 无监督异常检测 Anomaly Detection | — | 🚧 占位 | 工厂返回 `nullptr`，UI 记「未实现」 |
 
 ### 应用能力
@@ -116,7 +116,7 @@
                 │ ITask::run()
 ┌───────────────▼───────────────────────────────────────────────┐
 │  具体任务 (ITask 实现，各占独立子目录)                            │
-│   YoloDetector │ YoloSeg │ OCR(det+rec)                         │
+│   YoloDetector │ YoloSeg │ SemanticSeg │ OCR(det+rec)           │
 │   preprocess → forward → postprocess → draw                     │
 └───────────────┬───────────────────────────────────────────────┘
                 │ 组合
@@ -157,6 +157,9 @@ DetectAnything2/
 ├── yolo-seg/                 # 【实例分割】任务子目录
 │   ├── yoloseg.cpp/.h        #   YoloSeg : ITask（双输出解析 + 掩膜组装）
 │
+├── segment/                  # 【语义分割】任务子目录
+│   ├── segment.cpp/.h        #   SemanticSeg : ITask（类别索引图着色叠加原图）
+│
 ├── ocr/                      # 【OCR】任务子目录
 │   ├── ocr.cpp/.h            #   OCR : ITask（组合 det + rec）
 │   ├── ppocr_det.cpp/.h      #   文本检测 TextDetector
@@ -169,7 +172,7 @@ DetectAnything2/
 │   ├── yolo/                 #   yolo26m.onnx / yolo26m.engine
 │   ├── yolo-seg/             #   yolo26m-seg.onnx / yolo26m-seg.engine
 │   ├── ocr/                  #   det.* / rec.* / ppocrv6_dict.txt
-│   ├── segment/              #   （语义分割占位，空）
+│   ├── segment/              #   model_sim.onnx / model_sim.engine（语义分割）
 │   └── anomalyDetect/        #   （异常检测占位，空）
 │
 └── images/                   # 各任务的测试图片目录
@@ -183,6 +186,14 @@ DetectAnything2/
 ## 模型说明
 
 所有模型均为 **end2end**（检测 / 分割内置 NMS），输入为 letterbox 后的图像，FP16 精度部署。
+
+> **📦 模型下载**：`.onnx` / `.engine` / `.trtmodel` 文件体积较大，无法上传 GitHub。请从百度网盘下载后解压到项目 `models/` 目录（保持各任务子目录结构 yolo / yolo-seg / ocr / segment）：
+>
+> - **分享文件**：`models`
+> - **链接**：https://pan.baidu.com/s/1wB7NWU2Lfo7iYRyCcKqMPg?pwd=9527
+> - **提取码**：`9527`
+>
+> 若更换了 GPU / TensorRT / CUDA 环境，下载的 `.engine` 可能失效，请用对应 `.onnx` 按 [生成 TensorRT 引擎](#生成-tensorrt-引擎) 重新生成。
 
 ### 目标检测 · YOLO26m
 
@@ -208,6 +219,15 @@ DetectAnything2/
 | 文本检测 det | `960×960`（ImageNet 归一化） | 单通道概率图 → DB 后处理得文本框 |
 | 文本识别 rec | `48×640`（`(x/255-0.5)/0.5`） | `[1, maxChars, vocab]` → CTC 贪心解码 |
 
+### 语义分割 · PaddleSeg (model_sim)
+
+| 张量 | 维度 | 含义 |
+|------|------|------|
+| 输入 `images` | `1×3×960×960` | 直接 resize(960,960) + `(x/255-0.5)/0.5` + RGB |
+| 输出 `output0` | `1×960×960` | 每像素类别索引（模型图内已做 argmax） |
+
+> 后处理：类别索引图用**最近邻**上采样回原图尺寸（避免插值产生非法类别 id），按调色板着色后与原图半透明融合；背景类（id=0）保持原图不上色。
+
 ## 环境依赖
 
 在编译前请安装以下依赖（版本需匹配，TensorRT 引擎与硬件 / 版本强相关）：
@@ -228,6 +248,8 @@ DetectAnything2/
 git clone <your-repo-url>.git
 cd DetectAnything2
 ```
+
+> 📦 仓库不含模型文件，请先从 [模型说明](#模型说明) 的百度网盘链接下载 `models` 包并解压到项目根目录，再进行后续构建。
 
 ### 2. 配置依赖路径
 
@@ -269,6 +291,9 @@ trtexec --onnx=models\yolo\yolo26m.onnx        --saveEngine=models\yolo\yolo26m.
 :: 实例分割
 trtexec --onnx=models\yolo-seg\yolo26m-seg.onnx --saveEngine=models\yolo-seg\yolo26m-seg.engine --fp16
 
+:: 语义分割
+trtexec --onnx=models\segment\model_sim.onnx   --saveEngine=models\segment\model_sim.engine   --fp16
+
 :: OCR 检测 / 识别
 trtexec --onnx=models\ocr\det.onnx --saveEngine=models\ocr\det.trtmodel --fp16
 trtexec --onnx=models\ocr\rec.onnx --saveEngine=models\ocr\rec.trtmodel --fp16
@@ -290,6 +315,7 @@ trtexec --onnx=models\ocr\rec.onnx --saveEngine=models\ocr\rec.trtmodel --fp16
 | 模型 | GPU 吞吐 | 单帧 GPU 耗时（约） |
 |------|:-------:|:------------------:|
 | YOLO26m-seg | ~224 qps | ~3.7 ms |
+| model_sim (语义分割) | ~82 qps | ~10.9 ms |
 
 > 说明：以上为 `trtexec` 纯 GPU 推理基准。程序内实际 `inferMs` = 预处理 + GPU + 后处理（不含绘制），会略高于纯 GPU 耗时；得益于 20 次预热，首帧不再出现冷启动尖峰。实际数值以运行时日志「耗时分解」为准。
 
@@ -307,7 +333,7 @@ trtexec --onnx=models\ocr\rec.onnx --saveEngine=models\ocr\rec.trtmodel --fp16
 ## 注意事项
 
 - **引擎不可跨环境复用**：`.engine` / `.trtmodel` 与 GPU 架构、TensorRT / CUDA 版本绑定，换环境请用 `.onnx` 重新 `trtexec` 生成。
-- **大文件与构建产物**：模型引擎、ONNX 体积较大，`build/` 为构建产物。建议 `.gitignore` 忽略：
+- **大文件与构建产物**：模型引擎、ONNX 体积较大（本仓库不含模型文件，需从 [模型说明](#模型说明) 的百度网盘链接下载 `models` 包），`build/` 为构建产物。建议 `.gitignore` 忽略：
 
   ```gitignore
   build/
@@ -320,7 +346,7 @@ trtexec --onnx=models\ocr\rec.onnx --saveEngine=models\ocr\rec.trtmodel --fp16
   ```
 
 - **中文路径**：程序用 `QFile + cv::imdecode` 读图，已规避 Windows 下 `cv::imread` 无法读取中文路径的问题。
-- **占位任务**：语义分割 / 无监督异常检测目前工厂返回 `nullptr`，勾选后日志提示「未实现（占位）」，属预期行为。
+- **占位任务**：无监督异常检测目前工厂返回 `nullptr`，勾选后日志提示「未实现（占位）」，属预期行为。
 
 ## 许可证
 

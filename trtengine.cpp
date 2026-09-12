@@ -14,6 +14,20 @@ class TrtLogger : public nvinfer1::ILogger
             Logger::instance().log(Logger::WARNING, QString("TensorRT: %1").arg(msg));
     }
 } gLogger;
+
+// 各数据类型的单元素字节数：用于按真实 dtype 分配/拷贝输出，
+// 兼容语义分割 argmax 后的 INT32 类别索引图等非 float 输出。
+size_t dataTypeBytes(nvinfer1::DataType dt)
+{
+    switch (dt) {
+    case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kHALF:  return 2;
+    case nvinfer1::DataType::kINT8:  return 1;
+    case nvinfer1::DataType::kINT32: return 4;
+    case nvinfer1::DataType::kBOOL:  return 1;
+    default:                         return 4;
+    }
+}
 }
 
 TrtEngine::TrtEngine() = default;
@@ -79,6 +93,7 @@ bool TrtEngine::load(const std::string &enginePath)
         } else {
             m_outputIndices.push_back(i);   // 支持多输出：记录每个输出的 binding index
             m_outputDims.push_back(dims);
+            m_outputTypes.push_back(m_engine->getTensorDataType(name));  // 记录真实 dtype
         }
     }
 
@@ -87,14 +102,16 @@ bool TrtEngine::load(const std::string &enginePath)
         nvinfer1::Dims od = m_outputDims[k];
         size_t oSize = 1;
         for (int d = 0; d < od.nbDims; ++d) oSize *= od.d[d];
+        size_t elemBytes = dataTypeBytes(m_outputTypes[k]);   // 按真实 dtype 分配（int32/float 均 4 字节）
         float *host = nullptr;
-        if (cudaMallocHost((void **)&host, oSize * sizeof(float)) != cudaSuccess) {
+        if (cudaMallocHost((void **)&host, oSize * elemBytes) != cudaSuccess) {
             Logger::instance().error("cudaMallocHost 分配锁页输出内存失败");
             release();
             return false;
         }
         m_outputHosts.push_back(host);
         m_outputHostSizes.push_back(oSize);
+        m_outputElemBytes.push_back(elemBytes);
     }
 
     // ===== 预热（warmup）=====
@@ -116,7 +133,7 @@ bool TrtEngine::load(const std::string &enginePath)
             m_context->enqueueV3(m_stream);
             for (size_t k = 0; k < m_outputIndices.size(); ++k)
                 cudaMemcpyAsync(m_outputHosts[k], m_buffers[m_outputIndices[k]],
-                                m_outputHostSizes[k] * sizeof(float),
+                                m_outputHostSizes[k] * m_outputElemBytes[k],
                                 cudaMemcpyDeviceToHost, m_stream);
             cudaStreamSynchronize(m_stream);
         }
@@ -143,6 +160,8 @@ void TrtEngine::release()
         cudaFreeHost(h);
     m_outputHosts.clear();
     m_outputHostSizes.clear();
+    m_outputTypes.clear();
+    m_outputElemBytes.clear();
     if (m_stream) {
         cudaStreamDestroy(m_stream);
         m_stream = nullptr;
@@ -173,7 +192,7 @@ const float *TrtEngine::forward(const cv::Mat &inputBlobNCHW)
     // 复用 load() 预分配的缓冲，避免每帧堆分配。
     for (size_t k = 0; k < m_outputIndices.size(); ++k) {
         cudaMemcpyAsync(m_outputHosts[k], m_buffers[m_outputIndices[k]],
-                        m_outputHostSizes[k] * sizeof(float),
+                        m_outputHostSizes[k] * m_outputElemBytes[k],
                         cudaMemcpyDeviceToHost, m_stream);
     }
     cudaStreamSynchronize(m_stream);
@@ -213,6 +232,21 @@ size_t TrtEngine::outputSize(int i) const
     if (i < 0 || i >= (int)m_outputHostSizes.size())
         return 0;
     return m_outputHostSizes[i];
+}
+
+// 原始字节指针：整型输出（如 INT32 类别索引图）需由此取数据并按 dtype 解释
+const void *TrtEngine::outputRaw(int i) const
+{
+    if (i < 0 || i >= (int)m_outputHosts.size())
+        return nullptr;
+    return static_cast<const void *>(m_outputHosts[i]);
+}
+
+nvinfer1::DataType TrtEngine::outputDataType(int i) const
+{
+    if (i < 0 || i >= (int)m_outputTypes.size())
+        return nvinfer1::DataType::kFLOAT;
+    return m_outputTypes[i];
 }
 
 // 无参兼容版：语义锁定第 0 个输出（单输出任务无需感知多输出接口）
