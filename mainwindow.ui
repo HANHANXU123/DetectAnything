@@ -295,6 +295,13 @@ QGroupBox::title {
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QPushButton" name="btn_selectCamera">
+            <property name="text">
+             <string>选择相机</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>
@@ -347,7 +354,7 @@ QGroupBox::title {
           <item>
            <widget class="QPushButton" name="btn_start">
             <property name="text">
-             <string>开始</string>
+             <string>运行</string>
             </property>
            </widget>
           </item>
