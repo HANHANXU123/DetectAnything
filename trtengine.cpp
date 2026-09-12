@@ -94,6 +94,7 @@ bool TrtEngine::load(const std::string &enginePath)
             m_outputIndices.push_back(i);   // 支持多输出：记录每个输出的 binding index
             m_outputDims.push_back(dims);
             m_outputTypes.push_back(m_engine->getTensorDataType(name));  // 记录真实 dtype
+            m_outputNames.push_back(name);  // 记录张量名，供上层按名定位输出
         }
     }
 
@@ -161,6 +162,7 @@ void TrtEngine::release()
     m_outputHosts.clear();
     m_outputHostSizes.clear();
     m_outputTypes.clear();
+    m_outputNames.clear();
     m_outputElemBytes.clear();
     if (m_stream) {
         cudaStreamDestroy(m_stream);
@@ -247,6 +249,14 @@ nvinfer1::DataType TrtEngine::outputDataType(int i) const
     if (i < 0 || i >= (int)m_outputTypes.size())
         return nvinfer1::DataType::kFLOAT;
     return m_outputTypes[i];
+}
+
+// 输出张量名：供上层按名字（如 pred_score/anomaly_map）定位输出，规避绑定顺序差异
+std::string TrtEngine::outputName(int i) const
+{
+    if (i < 0 || i >= (int)m_outputNames.size())
+        return std::string();
+    return m_outputNames[i];
 }
 
 // 无参兼容版：语义锁定第 0 个输出（单输出任务无需感知多输出接口）

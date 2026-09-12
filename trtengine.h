@@ -46,6 +46,7 @@ public:
     // 否则把 int32 位模式当 float 读会得到完全错误的数值。
     const void *outputRaw(int i) const;             // 第 i 个输出原始字节指针（越界返回 nullptr）
     nvinfer1::DataType outputDataType(int i) const; // 第 i 个输出数据类型（越界返回 kFLOAT）
+    std::string outputName(int i) const;            // 第 i 个输出张量名（越界返回空串）
 
     std::vector<int> outputShape() const;         // = outputShape(0)，向后兼容单输出任务
     size_t outputSize() const;                    // = outputSize(0)，向后兼容单输出任务
@@ -75,6 +76,7 @@ private:
     std::vector<float *> m_outputHosts;
     std::vector<size_t> m_outputHostSizes;   // 各输出元素个数（非字节数）
     std::vector<nvinfer1::DataType> m_outputTypes;  // 各输出真实数据类型（float/int32/...）
+    std::vector<std::string> m_outputNames;         // 各输出张量名（按绑定顺序，供按名取用）
     std::vector<size_t> m_outputElemBytes;          // 各输出单元素字节数（float/int32 均为 4）
 
     double m_lastH2DMs = 0.0;

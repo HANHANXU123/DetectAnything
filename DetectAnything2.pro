@@ -6,6 +6,8 @@ CONFIG += c++17
 INCLUDEPATH += $$PWD
 # 任务源码子目录：YOLO 目标检测；YOLO-seg 实例分割；segment 语义分割；OCR（det/rec/utils/DB 后处理 + 第三方 clipper）
 INCLUDEPATH += $$PWD/yolo $$PWD/yolo-seg $$PWD/segment $$PWD/ocr $$PWD/ocr/clipper
+# 异常检测任务源码目录（PatchCore / TensorRT）
+INCLUDEPATH += $$PWD/anomaly
 
 # ============== OpenCV 配置 (MSVC) ==============
 OPENCV_SDK = E:/opencv/build
@@ -35,6 +37,7 @@ SOURCES += \
     yolo/yolo.cpp \
     yolo-seg/yoloseg.cpp \
     segment/segment.cpp \
+    anomaly/anomalydetect.cpp \
     inferenceworker.cpp \
     trtengine.cpp \
     taskfactory.cpp \
@@ -51,6 +54,7 @@ HEADERS += \
     yolo/yolo.h \
     yolo-seg/yoloseg.h \
     segment/segment.h \
+    anomaly/anomalydetect.h \
     inferenceworker.h \
     itask.h \
     trtengine.h \
