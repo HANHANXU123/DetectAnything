@@ -9,6 +9,7 @@
 
 int main(int argc, char *argv[])
 {
+
     QApplication a(argc, argv);
 
     // 抑制 OpenCV INFO 级别日志（如并行后端 DLL 加载失败等噪音）
