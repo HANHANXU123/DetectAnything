@@ -5,7 +5,7 @@
 **基于 Qt 6 + TensorRT 的桌面端多任务 AI 视觉推理部署演示**
 
 一个把「通用 TensorRT 推理引擎」与「具体任务的预处理 / 后处理 / 绘制」彻底解耦的
-多线程桌面推理框架，已落地 **目标检测**、**实例分割**、**语义分割**、**OCR** 四类任务。
+多线程桌面推理框架，已落地 **目标检测**、**实例分割**、**语义分割**、**OCR**、**无监督异常检测** 五类任务。
 
 ![Qt](https://img.shields.io/badge/Qt-6.9.3-41CD52?logo=qt&logoColor=white)
 ![OpenCV](https://img.shields.io/badge/OpenCV-4.8.0-5C3EE8?logo=opencv&logoColor=white)
@@ -46,7 +46,7 @@
 它的核心设计目标是「**通用引擎 + 任务插件化**」：
 
 - 与任务无关的推理管线（反序列化 engine、显存 / 锁页内存管理、`enqueueV3`、预热、分段计时）被封装进通用的 `TrtEngine`；
-- 每个具体任务（检测 / 分割 / OCR）只需实现 `ITask` 接口，编写自己专属的**预处理、后处理、绘制**三段逻辑；
+- 每个具体任务（检测 / 分割 / OCR / 异常检测）只需实现 `ITask` 接口，编写自己专属的**预处理、后处理、绘制**三段逻辑；
 - `TaskFactory` 作为唯一的组合根按任务类型创建实例，UI 与推理线程完全不感知具体任务，仅依赖 `itask.h`。
 
 因此**新增一个任务的成本极低**：建一个子目录、写一个 `ITask` 派生类、在工厂登记一行、在 `.pro` 添加源文件即可，框架代码零改动。
@@ -61,7 +61,7 @@
 | 实例分割 Instance Segmentation | YOLO26m-seg | ✅ 已实现 | 半透明彩色掩膜 + 检测框 + 标签 |
 | 文字识别 OCR | PPOCR (det + rec) | ✅ 已实现 | 文本框 + 识别文字（微软雅黑中文渲染） |
 | 语义分割 Semantic Segmentation | PaddleSeg (model_sim) | ✅ 已实现 | 半透明彩色类别掩膜叠加原图 |
-| 无监督异常检测 Anomaly Detection | — | 🚧 占位 | 工厂返回 `nullptr`，UI 记「未实现」 |
+| 无监督异常检测 Anomaly Detection | PatchCore (anomalib) | ✅ 已实现 | 三联面板（原图 / jet 热力图 / α=0.5 叠加）+ 缺陷红描边 + OK/NG 判定 |
 
 ### 应用能力
 
@@ -124,7 +124,7 @@
                 │ ITask::run()
 ┌───────────────▼───────────────────────────────────────────────┐
 │  具体任务 (ITask 实现，各占独立子目录)                            │
-│   YoloDetector │ YoloSeg │ SemanticSeg │ OCR(det+rec)           │
+│   YoloDetector │ YoloSeg │ SemanticSeg │ OCR │ AnomalyDetect    │
 │   preprocess → forward → postprocess → draw                     │
 └───────────────┬───────────────────────────────────────────────┘
                 │ 组合
@@ -176,14 +176,17 @@ DetectAnything2/
 │   ├── postprocess_det.cpp   #   DB 后处理
 │   └── clipper/              #   第三方多边形裁剪库
 │
+├── anomaly/                  # 【无监督异常检测】任务子目录
+│   ├── anomalydetect.cpp/.h  #   AnomalyDetect : ITask（PatchCore 热力图 + OK/NG 判定）
+│
 ├── models/                   # 模型文件（ONNX + TensorRT 引擎）
 │   ├── yolo/                 #   yolo26m.onnx / yolo26m.engine
 │   ├── yolo-seg/             #   yolo26m-seg.onnx / yolo26m-seg.engine
 │   ├── ocr/                  #   det.* / rec.* / ppocrv6_dict.txt
 │   ├── segment/              #   model_sim.onnx / model_sim.engine（语义分割）
-│   └── anomalyDetect/        #   （异常检测占位，空）
+│   └── anomalyDetect/        #   model.onnx / model.engine（无监督异常检测）
 │
-├── docs/                     # README 界面截图（detect / instance-seg / seg / ocr）
+├── docs/                     # README 界面截图（detect / instance-seg / seg / ocr / anomaly）
 │
 └── images/                   # 各任务的测试图片目录
     ├── 目标检测/
@@ -195,9 +198,9 @@ DetectAnything2/
 
 ## 模型说明
 
-所有模型均为 **end2end**（检测 / 分割内置 NMS），输入为 letterbox 后的图像，FP16 精度部署。
+各模型的输入尺寸与归一化方式见下方对应表格，均以 **FP16** 精度部署；检测 / 实例分割为 **end2end**（图内已含 NMS），异常检测的归一化与判定阈值也已烤进 engine。
 
-> **📦 模型下载**：`.onnx` / `.engine` / `.trtmodel` 文件体积较大，无法上传 GitHub。请从百度网盘下载后解压到项目 `models/` 目录（保持各任务子目录结构 yolo / yolo-seg / ocr / segment）：
+> **📦 模型下载**：`.onnx` / `.engine` / `.trtmodel` 文件体积较大，无法上传 GitHub。请从百度网盘下载后解压到项目 `models/` 目录（保持各任务子目录结构 yolo / yolo-seg / ocr / segment / anomalyDetect）：
 >
 > - **分享文件**：`models`
 > - **链接**：https://pan.baidu.com/s/1wB7NWU2Lfo7iYRyCcKqMPg?pwd=9527
@@ -237,6 +240,17 @@ DetectAnything2/
 | 输出 `output0` | `1×960×960` | 每像素类别索引（模型图内已做 argmax） |
 
 > 后处理：类别索引图用**最近邻**上采样回原图尺寸（避免插值产生非法类别 id），按调色板着色后与原图半透明融合；背景类（id=0）保持原图不上色。
+
+### 无监督异常检测 · PatchCore (anomalib)
+
+| 张量 | 维度 | 含义 |
+|------|------|------|
+| 输入 `input` | `1×3×256×256` | resize(256,256) + ÷255 + RGB（ImageNet mean/std 已烤进 engine，C++ 侧不再归一化） |
+| 输出 `pred_score` | `1` | 图像级异常分（归一化 [0,1]，>0.5 判 NG） |
+| 输出 `anomaly_map` | `1×1×256×256` | 像素级热力图（归一化 [0,1]，0.5=阈值） |
+| 输出 `pred_label` / `pred_mask` | `1` / `1×1×256×256` | BOOL 判定；本任务改用 score / map 重算以规避 bool 输出 |
+
+> 后处理：`anomaly_map` 上采样回原图 → 套 9 锚点 jet LUT 上色（1:1 复刻 anomalib `apply_colormap`，手写 LUT 规避 OpenCV 4.8 `applyColorMap` 对自定义表的断言）→ 与原图 α=0.5 叠加 → `>0.5` 连通域计缺陷数并红描边；4 个输出按**名字**取用（`resolveOutputs`），绑定顺序不保证。渲染为「原图 / 热力图 / 叠加图」三联面板 + OK/NG 判定横幅。
 
 ## 环境依赖
 
@@ -307,13 +321,16 @@ trtexec --onnx=models\segment\model_sim.onnx   --saveEngine=models\segment\model
 :: OCR 检测 / 识别
 trtexec --onnx=models\ocr\det.onnx --saveEngine=models\ocr\det.trtmodel --fp16
 trtexec --onnx=models\ocr\rec.onnx --saveEngine=models\ocr\rec.trtmodel --fp16
+
+:: 无监督异常检测
+trtexec --onnx=models\anomalyDetect\model.onnx --saveEngine=models\anomalyDetect\model.engine --fp16
 ```
 
 程序通过 `MainWindow::resolveEnginePath()` 逐级查找引擎文件（当前目录 → 可执行文件上级目录 → 项目源码目录），因此把引擎放在 `models/` 对应子目录即可被自动定位。
 
 ## 使用方法
 
-1. 启动程序，勾选左侧任一**已实现**的任务类型（目标检测 / 实例分割 / OCR）；日志会显示 `xxx推理初始化成功` 及输出张量形状。
+1. 启动程序，勾选左侧任一任务类型（目标检测 / 实例分割 / 语义分割 / OCR / 无监督异常检测，均已实现）；日志会显示 `xxx推理初始化成功` 及输出张量形状。
 2. 点击 **选择图片** 按钮，选择对应任务的图片文件夹（程序默认打开 `images/` 下的任务专属子目录）。
 3. 点击 **开始** 按钮，程序逐帧推理并在中间区域显示渲染结果，右侧实时刷新推理耗时 / FPS。
 4. 切换任务类型前需等待当前推理空闲（推理中任务勾选会被自动锁定）。
@@ -356,7 +373,7 @@ trtexec --onnx=models\ocr\rec.onnx --saveEngine=models\ocr\rec.trtmodel --fp16
   ```
 
 - **中文路径**：程序用 `QFile + cv::imdecode` 读图，已规避 Windows 下 `cv::imread` 无法读取中文路径的问题。
-- **占位任务**：无监督异常检测目前工厂返回 `nullptr`，勾选后日志提示「未实现（占位）」，属预期行为。
+- **异常检测归一化已内置**：PatchCore engine 已把 ImageNet mean/std 与分数 / 热力图归一化（阈值 0.5）烤进图内，C++ 侧只做 resize + ÷255 + RGB，**切勿重复归一化**，否则判定失准。
 
 ## 许可证
 
